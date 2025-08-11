@@ -9,7 +9,8 @@
 
 | **版本**        | **源码**                                                                                   | **Windows**                                                                                   | **Linux**                                                                                   | **MacOS**     |
 |------------------|--------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------| ---------------------------------------------------------------------------------------------|
-| **Chrome 136**   | 跟随Chrome 137发布              | [安装包](https://github.com/adryfish/fingerprint-chromium/releases/download/136.0.7103.113/ungoogled-chromium_136.0.7103.113-1.1_installer_x64.exe) <br> [ZIP](https://github.com/adryfish/fingerprint-chromium/releases/download/136.0.7103.113/ungoogled-chromium_136.0.7103.113-1.1_windows_x64.zip) | [ 136.0.7103.113-1_linux.tar.xz ](https://github.com/adryfish/fingerprint-chromium/releases/download/136.0.7103.113/ungoogled-chromium_136.0.7103.113-1_linux.tar.xz) | [136.0.7103.113-1.1_macos.dmg](https://github.com/adryfish/fingerprint-chromium/releases/download/136.0.7103.113/ungoogled-chromium_136.0.7103.113-1.1_macos.dmg) |
+| **Chrome 138**   | 跟随Chrome 139发布              | [安装包](https://github.com/adryfish/fingerprint-chromium/releases/download/138.0.7204.183/ungoogled-chromium_138.0.7204.183-1.1_installer_x64.exe) <br> [ZIP](https://github.com/adryfish/fingerprint-chromium/releases/download/138.0.7204.183/ungoogled-chromium_138.0.7204.183-1.1_windows_x64.zip) | [ 138.0.7204.183-1_linux.tar.xz ](https://github.com/adryfish/fingerprint-chromium/releases/download/138.0.7204.183/ungoogled-chromium_138.0.7204.183-1_linux.tar.xz) |  |
+| **Chrome 136**   | [136.0.7103.113](https://github.com/adryfish/fingerprint-chromium/tree/136.0.7103.113)              | [安装包](https://github.com/adryfish/fingerprint-chromium/releases/download/136.0.7103.113/ungoogled-chromium_136.0.7103.113-1.1_installer_x64.exe) <br> [ZIP](https://github.com/adryfish/fingerprint-chromium/releases/download/136.0.7103.113/ungoogled-chromium_136.0.7103.113-1.1_windows_x64.zip) | [ 136.0.7103.113-1_linux.tar.xz ](https://github.com/adryfish/fingerprint-chromium/releases/download/136.0.7103.113/ungoogled-chromium_136.0.7103.113-1_linux.tar.xz) | [136.0.7103.113-1.1_macos.dmg](https://github.com/adryfish/fingerprint-chromium/releases/download/136.0.7103.113/ungoogled-chromium_136.0.7103.113-1.1_macos.dmg) |
 | **Chrome 135**   | [135.0.7049.95](https://github.com/adryfish/fingerprint-chromium/tree/135.0.7049.95)               | [安装包](https://github.com/adryfish/fingerprint-chromium/releases/download/135.0.7049.95/ungoogled-chromium_135.0.7049.95-1.1_installer_x64.exe) <br> [ZIP](https://github.com/adryfish/fingerprint-chromium/releases/download/135.0.7049.95/ungoogled-chromium_135.0.7049.95-1.1_windows_x64.zip) | [ 135.0.7049.95-1_linux.tar.xz ](https://github.com/adryfish/fingerprint-chromium/releases/download/135.0.7049.95/ungoogled-chromium_135.0.7049.95-1_linux.tar.xz) | [135.0.7049.95-1.1_macos.dmg](https://github.com/adryfish/fingerprint-chromium/releases/download/135.0.7049.95/ungoogled-chromium_135.0.7049.95-1.1_macos.dmg) |
 | **Chrome 134**   | [134.0.6998.165](https://github.com/adryfish/fingerprint-chromium/tree/134.0.6998.165)               | [安装包](https://github.com/adryfish/fingerprint-chromium/releases/download/134.0.6998.165/ungoogled-chromium_134.0.6998.165-1.1_installer_x64.exe) <br> [ZIP](https://github.com/adryfish/fingerprint-chromium/releases/download/134.0.6998.165/ungoogled-chromium_134.0.6998.165-1.1_windows_x64.zip) | [ 134.0.6998.165-1_linux.tar.xz ](https://github.com/adryfish/fingerprint-chromium/releases/download/134.0.6998.165/ungoogled-chromium_134.0.6998.165-1_linux.tar.xz) |  |
 | **Chrome 133**   | [133.0.6943.126](https://github.com/adryfish/fingerprint-chromium/tree/133.0.6943.126)               | [安装包](https://github.com/adryfish/fingerprint-chromium/releases/download/133.0.6943.126/ungoogled-chromium_133.0.6943.126-1.1_installer_x64.exe) <br> [ZIP](https://github.com/adryfish/fingerprint-chromium/releases/download/133.0.6943.126/ungoogled-chromium_133.0.6943.126-1.1_windows_x64.zip) | [ 133.0.6943.126-1_linux.tar.xz ](https://github.com/adryfish/fingerprint-chromium/releases/download/133.0.6943.126/ungoogled-chromium_133.0.6943.126-1_linux.tar.xz) |  |
@@ -37,12 +38,12 @@
 一旦源代码发布，您可以参考[`ungoogled-chromium`](https://github.com/ungoogled-software/ungoogled-chromium/blob/master/docs/building.md)文档进行构建。只需将`ungoogled-chromium`子模块URL替换为`fingerprint-browser`仓库URL即可。
 
 
-## 📢 广告
+## 📢 作者其他项目
 
 <div style="border: 2px solid #f39c12; padding: 15px; background-color: #fffbe6; border-radius: 10px;">
 
 <details open>
-<summary><b>🌟 推荐工具：EasyChat - Claude官网镜像</b></summary>
+<summary><b>🌟 EasyChat - Claude官网镜像</b></summary>
 
 🔥 **EasyChat** 是一个无需注册和登录的 Claude 官网镜像，免费提供国内直登体验，1:1 还原官网功能，为你畅享高效的 AI 助手服务！
 
@@ -51,6 +52,25 @@
 - 🤝 **共享会员**：支持使用 Claude 会员账号，无需担心封号风险。
 
 🔗 **访问网站**：[https://easychat.top](https://easychat.top)
+
+</details>
+
+</div>
+
+<div style="border: 2px solid #3498db; padding: 15px; background-color: #e6f3ff; border-radius: 10px; margin-top: 15px;">
+
+<details open>
+<summary><b>🛠️ Flapcode</b></summary>
+
+专为不便自建但需要使用 Claude Code 的用户打造的一站式解决方案。
+
+**核心优势：**
+- 🌐 **国内直连**：无需科学上网，即可极速访问 Claude Code 完整功能
+- 🤝 **全站 Max 账号**：享受完整的模型体验，无需担心使用限制
+- 💰 **计费简单透明**：采用与官方 API 相同的计费标准，每日更新使用额度
+- 🔒 **安全可靠**：专业运维团队保障服务稳定性，让您专注于开发本身
+
+🔗 **访问网站**：[https://flapcode.com](https://flapcode.com)
 
 </details>
 
@@ -146,8 +166,8 @@ chrome.exe --fingerprint=2023 --fingerprint-platform=macos --fingerprint-platfor
 
 | 测试平台                                                                                            | 状态                                                      |
 | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| [**CreepJS**](https://abrahamjuliot.github.io/creepjs/)                                            | ✔️ 51.5%。成功伪装所有操作系统预测。                         |
-| [**BrowserScan**](https://browserscan.net/)                                                        | ✔️ 100%。伪装所有地理位置和区域代理检测。                     |
+| [**CreepJS**](https://abrahamjuliot.github.io/creepjs/)                                            | ✔️ 51.5%。                          |
+| [**BrowserScan**](https://browserscan.net/)                                                        | ✔️ 100%。通过所有检测。                 |
 | [**BrowserLeaks**](https://browserleaks.com/)                                                      | ✔️ 支持多项指纹泄漏检测                                      |
 | **Cloudflare**                                                                                     | ✔️                                                        |
 | ‣ [Turnstile](https://nopecha.com/demo/turnstile)                                                  | ✔️                                                        |
@@ -155,9 +175,12 @@ chrome.exe --fingerprint=2023 --fingerprint-platform=macos --fingerprint-platfor
 
 ## 用户交流
 
-扫码加入QQ群与其他用户交流：
+扫码加入QQ群与其他用户交流
 
 <img src="qqgroup.png" alt="QQ群二维码" width="300">
+
+如果您需要Chrome定制开发服务或寻找定制开发机会，请加开发定制群 (群号 1055930761)
+
 
 ## Credits
 
