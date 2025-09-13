@@ -1,70 +1,200 @@
-name: Build Chromium macOS x64 (Debug)
+name: Build Chromium macOS x64
 
-  on:
-    workflow_dispatch:
-      inputs:
-        version:
-          description: 'Chromium version to build'
-          required: true
-          default: '136.0.7103.113'
-          type: string
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Chromium version to build'
+        required: true
+        default: '136.0.7103.113'
+        type: string
 
-  jobs:
-    build-macos-x64:
-      runs-on: macos-13  # Uses Intel x64 runner instead of Apple Silicon
-      timeout-minutes: 360  # 6 hours max
+jobs:
+  build-macos-x64:
+    runs-on: macos-13  # Uses Intel x64 runner instead of Apple Silicon
+    timeout-minutes: 360  # 6 hours max
 
-      steps:
-      - name: Debug - Show environment
-        run: |
-          echo "=== System Information ==="
-          uname -a
-          sw_vers
-          echo "=== Available tools ==="
-          which python3 || echo "python3 not found"
-          python3 --version || echo "python3 version failed"
-          which ninja || echo "ninja not found"
-          ninja --version || echo "ninja version failed"
-          which brew || echo "brew not found"
-          echo "=== Current directory ==="
-          pwd
-          ls -la
-          echo "=== GitHub runner info ==="
-          echo "GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
-          echo "RUNNER_OS: $RUNNER_OS"
-          echo "RUNNER_ARCH: $RUNNER_ARCH"
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Checkout code
-        uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
 
-      - name: Debug - After checkout
-        run: |
-          echo "=== After checkout ==="
-          pwd
-          ls -la
-          echo "=== Check if required files exist ==="
-          ls -la utils/ || echo "utils directory not found"
-          ls -la downloads.ini || echo "downloads.ini not found"
-          ls -la pruning.list || echo "pruning.list not found"
-          ls -la patches/ || echo "patches directory not found"
+    - name: Install system dependencies
+      run: |
+        echo "=== Installing system dependencies ==="
+        # Check if ninja is already installed
+        if ! command -v ninja &> /dev/null; then
+          echo "Installing ninja..."
+          brew install ninja
+        else
+          echo "ninja is already installed: $(ninja --version)"
+        fi
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
+        # Clone depot_tools
+        echo "=== Setting up depot_tools ==="
+        if [ ! -d "depot_tools" ]; then
+          git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git || true
+        fi
+        export PATH="$PWD/depot_tools:$PATH"
+        echo "$PWD/depot_tools" >> $GITHUB_PATH
 
-      - name: Test basic commands
-        run: |
-          echo "=== Testing basic commands ==="
-          python3 --version
-          python3 -c "print('Python works')"
-          echo "=== Testing brew ==="
-          brew --version
-          echo "=== Testing ninja install ==="
-          if ! command -v ninja &> /dev/null; then
-            echo "Installing ninja..."
-            brew install ninja
-          else
-            echo "ninja is already installed"
-          fi
-          ninja --version
+    - name: Download Chromium source
+      run: |
+        echo "=== Downloading Chromium source ==="
+        mkdir -p build/download_cache
+        python3 utils/downloads.py retrieve -c build/download_cache -i downloads.ini
+        echo "=== Unpacking Chromium source ==="
+        python3 utils/downloads.py unpack -c build/download_cache -i downloads.ini -- build/src
+
+    - name: Prune binaries
+      run: |
+        echo "=== Pruning binaries ==="
+        python3 utils/prune_binaries.py build/src pruning.list
+
+    - name: Apply patches
+      run: |
+        echo "=== Applying patches ==="
+        python3 utils/patches.py apply build/src patches
+
+    - name: Apply domain substitution
+      run: |
+        echo "=== Applying domain substitution ==="
+        python3 utils/domain_substitution.py apply -r domain_regex.list -f domain_substitution.list -c build/domsubcache.tar.gz build/src
+
+    - name: Setup build configuration
+      run: |
+        echo "=== Setting up build configuration ==="
+        mkdir -p build/src/out/Default
+        cat > build/src/out/Default/args.gn << 'EOF'
+        # Base configuration from flags.gn
+        build_with_tflite_lib=false
+        chrome_pgo_phase=0
+        clang_use_chrome_plugins=false
+        disable_fieldtrial_testing_config=true
+        enable_hangout_services_extension=false
+        enable_mdns=false
+        enable_nacl=false
+        enable_reading_list=false
+        enable_remoting=false
+        enable_reporting=false
+        enable_service_discovery=false
+        enable_widevine=true
+        exclude_unwind_tables=true
+        google_api_key=""
+        google_default_client_id=""
+        google_default_client_secret=""
+        safe_browsing_mode=0
+        treat_warnings_as_errors=false
+        use_official_google_api_keys=false
+        use_unofficial_version_number=false
+
+        # Target x64 specifically
+        target_cpu="x64"
+        is_debug=false
+        is_component_build=false
+        symbol_level=1
+        blink_symbol_level=0
+
+        # Disable problematic features for build
+        enable_rust=false
+        use_cxx=false
+        is_official_build=false
+        use_clang_coverage=false
+        use_libfuzzer=false
+        use_sanitizer_coverage=false
+
+        # Use system tools
+        is_clang=true
+        use_custom_libcxx=false
+        EOF
+
+        echo "=== Build configuration created ==="
+        cat build/src/out/Default/args.gn
+
+    - name: Setup Clang toolchain
+      run: |
+        echo "=== Setting up Clang toolchain ==="
+        cd build/src
+        # Try to download clang, if it fails, we'll use system clang
+        if ! python3 tools/clang/scripts/update.py; then
+          echo "Failed to download Chromium clang, using system clang"
+          # Modify build config to use system clang
+          echo 'clang_base_path="/usr"' >> out/Default/args.gn
+        else
+          echo "Successfully downloaded Chromium clang"
+        fi
+
+    - name: Bootstrap GN
+      run: |
+        echo "=== Bootstrapping GN ==="
+        cd build/src
+        python3 tools/gn/bootstrap/bootstrap.py --skip-generate-buildfiles -j4 -o out/Default/
+
+    - name: Generate build files
+      run: |
+        echo "=== Generating build files ==="
+        cd build/src
+        ./out/Default/gn gen out/Default
+
+    - name: Build Chromium
+      run: |
+        echo "=== Building Chromium ==="
+        cd build/src
+        # Use fewer parallel jobs to avoid memory issues
+        ninja -C out/Default chrome chromedriver -j2
+
+    - name: Package application
+      run: |
+        echo "=== Packaging application ==="
+        cd build/src/out/Default
+
+        # Create .app bundle structure
+        mkdir -p Chromium.app/Contents/{MacOS,Resources}
+
+        # Copy main binary
+        cp chrome Chromium.app/Contents/MacOS/Chromium
+        chmod +x Chromium.app/Contents/MacOS/Chromium
+
+        # Copy resources
+        cp -r *.pak *.bin Chromium.app/Contents/Resources/ 2>/dev/null || true
+        cp -r locales Chromium.app/Contents/Resources/ 2>/dev/null || true
+
+        # Create Info.plist
+        cat > Chromium.app/Contents/Info.plist << 'EOF'
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+          <key>CFBundleExecutable</key>
+          <string>Chromium</string>
+          <key>CFBundleIdentifier</key>
+          <string>org.chromium.Chromium</string>
+          <key>CFBundleName</key>
+          <string>Chromium</string>
+          <key>CFBundleVersion</key>
+          <string>136.0.7103.113</string>
+          <key>CFBundleShortVersionString</key>
+          <string>136.0.7103.113</string>
+          <key>LSMinimumSystemVersion</key>
+          <string>10.15</string>
+        </dict>
+        </plist>
+        EOF
+
+        # Create DMG
+        echo "=== Creating DMG ==="
+        hdiutil create -volname "Chromium" -srcfolder Chromium.app -ov -format UDZO chromium-macos-x64.dmg
+
+        # Verify DMG was created
+        ls -la chromium-macos-x64.dmg
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: chromium-macos-x64-${{ github.run_number }}
+        path: build/src/out/Default/chromium-macos-x64.dmg
+        retention-days: 30
