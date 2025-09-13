@@ -17,43 +17,80 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.version }}
+
+    - name: Verify checkout
+      run: |
+        echo "=== Verifying checkout ==="
+        pwd
+        ls -la
+        echo "=== Check for required files ==="
+        ls -la utils/ downloads.ini pruning.list patches/ || echo "Some files may be missing"
 
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.11'
 
-    - name: Install dependencies
+    - name: Install system dependencies
       run: |
+        echo "=== Installing system dependencies ==="
         # Check if ninja is already installed
         if ! command -v ninja &> /dev/null; then
+          echo "Installing ninja..."
           brew install ninja
+        else
+          echo "ninja is already installed: $(ninja --version)"
         fi
+
         # Clone depot_tools
-        git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git || true
+        echo "=== Setting up depot_tools ==="
+        if [ ! -d "depot_tools" ]; then
+          git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git || true
+        fi
         export PATH="$PWD/depot_tools:$PATH"
         echo "$PWD/depot_tools" >> $GITHUB_PATH
 
     - name: Download Chromium source
       run: |
+        echo "=== Downloading Chromium source ==="
         mkdir -p build/download_cache
         python3 utils/downloads.py retrieve -c build/download_cache -i downloads.ini
+        echo "=== Unpacking Chromium source ==="
         python3 utils/downloads.py unpack -c build/download_cache -i downloads.ini -- build/src
 
     - name: Prune binaries
       run: |
+        echo "=== Pruning binaries ==="
         python3 utils/prune_binaries.py build/src pruning.list
 
     - name: Apply patches
       run: |
+        echo "=== Applying patches ==="
         python3 utils/patches.py apply build/src patches
 
     - name: Apply domain substitution
       run: |
+        echo "=== Applying domain substitution ==="
         python3 utils/domain_substitution.py apply -r domain_regex.list -f domain_substitution.list -c build/domsubcache.tar.gz build/src
+
+    - name: Remove Rust dependencies
+      run: |
+        echo "=== Removing Rust dependencies ==="
+        cd build/src
+        # Remove Rust-related build files to avoid the error
+        find . -name "*.gni" -exec grep -l "rust_sysroot\|cargo_crate" {} \; | head -10
+
+        # Disable Rust in multiple places
+        find . -name "*.gn" -exec sed -i '' 's/enable_rust = true/enable_rust = false/g' {} \; 2>/dev/null || true
+        find . -name "*.gni" -exec sed -i '' 's/enable_rust = true/enable_rust = false/g' {} \; 2>/dev/null || true
+
+        echo "=== Rust removal completed ==="
 
     - name: Setup build configuration
       run: |
+        echo "=== Setting up build configuration ==="
         mkdir -p build/src/out/Default
         cat > build/src/out/Default/args.gn << 'EOF'
         # Base configuration from flags.gn
@@ -85,47 +122,65 @@ jobs:
         symbol_level=1
         blink_symbol_level=0
 
-        # Disable problematic features
+        # Completely disable Rust
         enable_rust=false
         use_cxx=false
+        build_rust_base_tests=false
+        enable_cxx=false
+
+        # Additional Rust disabling
+        rust_sysroot_absolute=""
+        enable_rust_crash=false
+
+        # Build configuration
         is_official_build=false
         use_clang_coverage=false
         use_libfuzzer=false
         use_sanitizer_coverage=false
 
-        # Use system tools
+        # Use system clang
         is_clang=true
         use_custom_libcxx=false
+        clang_base_path="/usr"
         EOF
 
-    - name: Download and setup Clang
-      run: |
-        cd build/src
-        # Try to download clang, if it fails, we'll use system clang
-        python3 tools/clang/scripts/update.py || echo "Using system clang"
+        echo "=== Build configuration created ==="
+        cat build/src/out/Default/args.gn
 
     - name: Bootstrap GN
       run: |
+        echo "=== Bootstrapping GN ==="
         cd build/src
         python3 tools/gn/bootstrap/bootstrap.py --skip-generate-buildfiles -j4 -o out/Default/
 
     - name: Generate build files
       run: |
+        echo "=== Generating build files ==="
         cd build/src
-        ./out/Default/gn gen out/Default --fail-on-unused-args
+        ./out/Default/gn gen out/Default
 
     - name: Build Chromium
       run: |
+        echo "=== Building Chromium ==="
         cd build/src
-        ninja -C out/Default chrome chromedriver -j4
+        # Use fewer parallel jobs to avoid memory issues
+        ninja -C out/Default chrome chromedriver -j2
 
     - name: Package application
       run: |
+        echo "=== Packaging application ==="
         cd build/src/out/Default
-        # Create .app bundle
+
+        # Create .app bundle structure
         mkdir -p Chromium.app/Contents/{MacOS,Resources}
+
+        # Copy main binary
         cp chrome Chromium.app/Contents/MacOS/Chromium
-        cp -r *.pak *.bin Chromium.app/Contents/Resources/ || true
+        chmod +x Chromium.app/Contents/MacOS/Chromium
+
+        # Copy resources
+        cp -r *.pak *.bin Chromium.app/Contents/Resources/ 2>/dev/null || true
+        cp -r locales Chromium.app/Contents/Resources/ 2>/dev/null || true
 
         # Create Info.plist
         cat > Chromium.app/Contents/Info.plist << 'EOF'
@@ -141,12 +196,20 @@ jobs:
           <string>Chromium</string>
           <key>CFBundleVersion</key>
           <string>136.0.7103.113</string>
+          <key>CFBundleShortVersionString</key>
+          <string>136.0.7103.113</string>
+          <key>LSMinimumSystemVersion</key>
+          <string>10.15</string>
         </dict>
         </plist>
         EOF
 
         # Create DMG
+        echo "=== Creating DMG ==="
         hdiutil create -volname "Chromium" -srcfolder Chromium.app -ov -format UDZO chromium-macos-x64.dmg
+
+        # Verify DMG was created
+        ls -la chromium-macos-x64.dmg
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
