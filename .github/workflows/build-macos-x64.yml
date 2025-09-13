@@ -1,0 +1,152 @@
+name: Build Chromium macOS x64
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Chromium version to build'
+        required: true
+        default: '136.0.7103.113'
+        type: string
+
+jobs:
+  build-macos-x64:
+    runs-on: macos-13  # Uses Intel x64 runner instead of Apple Silicon
+    timeout-minutes: 360  # 6 hours max
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        brew install ninja
+        # Clone depot_tools
+        git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+        export PATH="$PWD/depot_tools:$PATH"
+        echo "$PWD/depot_tools" >> $GITHUB_PATH
+
+    - name: Download Chromium source
+      run: |
+        mkdir -p build/download_cache
+        python3 utils/downloads.py retrieve -c build/download_cache -i downloads.ini
+        python3 utils/downloads.py unpack -c build/download_cache -i downloads.ini -- build/src
+
+    - name: Prune binaries
+      run: |
+        python3 utils/prune_binaries.py build/src pruning.list
+
+    - name: Apply patches
+      run: |
+        python3 utils/patches.py apply build/src patches
+
+    - name: Apply domain substitution
+      run: |
+        python3 utils/domain_substitution.py apply -r domain_regex.list -f domain_substitution.list -c build/domsubcache.tar.gz build/src
+
+    - name: Setup build configuration
+      run: |
+        mkdir -p build/src/out/Default
+        cat > build/src/out/Default/args.gn << 'EOF'
+        # Base configuration from flags.gn
+        build_with_tflite_lib=false
+        chrome_pgo_phase=0
+        clang_use_chrome_plugins=false
+        disable_fieldtrial_testing_config=true
+        enable_hangout_services_extension=false
+        enable_mdns=false
+        enable_nacl=false
+        enable_reading_list=false
+        enable_remoting=false
+        enable_reporting=false
+        enable_service_discovery=false
+        enable_widevine=true
+        exclude_unwind_tables=true
+        google_api_key=""
+        google_default_client_id=""
+        google_default_client_secret=""
+        safe_browsing_mode=0
+        treat_warnings_as_errors=false
+        use_official_google_api_keys=false
+        use_unofficial_version_number=false
+
+        # Target x64 specifically
+        target_cpu="x64"
+        is_debug=false
+        is_component_build=false
+        symbol_level=1
+        blink_symbol_level=0
+
+        # Disable problematic features
+        enable_rust=false
+        use_cxx=false
+        is_official_build=false
+        use_clang_coverage=false
+        use_libfuzzer=false
+        use_sanitizer_coverage=false
+
+        # Use system tools
+        is_clang=true
+        use_custom_libcxx=false
+        EOF
+
+    - name: Download and setup Clang
+      run: |
+        cd build/src
+        python3 tools/clang/scripts/update.py
+
+    - name: Bootstrap GN
+      run: |
+        cd build/src
+        python3 tools/gn/bootstrap/bootstrap.py --skip-generate-buildfiles -j4 -o out/Default/
+
+    - name: Generate build files
+      run: |
+        cd build/src
+        ./out/Default/gn gen out/Default --fail-on-unused-args
+
+    - name: Build Chromium
+      run: |
+        cd build/src
+        ninja -C out/Default chrome chromedriver -j4
+
+    - name: Package application
+      run: |
+        cd build/src/out/Default
+        # Create .app bundle
+        mkdir -p Chromium.app/Contents/{MacOS,Resources}
+        cp chrome Chromium.app/Contents/MacOS/Chromium
+        cp -r *.pak *.bin Chromium.app/Contents/Resources/ || true
+
+        # Create Info.plist
+        cat > Chromium.app/Contents/Info.plist << 'EOF'
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+          <key>CFBundleExecutable</key>
+          <string>Chromium</string>
+          <key>CFBundleIdentifier</key>
+          <string>org.chromium.Chromium</string>
+          <key>CFBundleName</key>
+          <string>Chromium</string>
+          <key>CFBundleVersion</key>
+          <string>136.0.7103.113</string>
+        </dict>
+        </plist>
+        EOF
+
+        # Create DMG
+        hdiutil create -volname "Chromium" -srcfolder Chromium.app -ov -format UDZO chromium-macos-x64.dmg
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: chromium-macos-x64-${{ github.run_number }}
+        path: build/src/out/Default/chromium-macos-x64.dmg
+        retention-days: 30
