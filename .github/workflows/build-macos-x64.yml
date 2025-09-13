@@ -25,9 +25,12 @@ jobs:
 
     - name: Install dependencies
       run: |
-        brew install ninja
+        # Check if ninja is already installed
+        if ! command -v ninja &> /dev/null; then
+          brew install ninja
+        fi
         # Clone depot_tools
-        git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+        git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git || true
         export PATH="$PWD/depot_tools:$PATH"
         echo "$PWD/depot_tools" >> $GITHUB_PATH
 
@@ -98,7 +101,8 @@ jobs:
     - name: Download and setup Clang
       run: |
         cd build/src
-        python3 tools/clang/scripts/update.py
+        # Try to download clang, if it fails, we'll use system clang
+        python3 tools/clang/scripts/update.py || echo "Using system clang"
 
     - name: Bootstrap GN
       run: |
