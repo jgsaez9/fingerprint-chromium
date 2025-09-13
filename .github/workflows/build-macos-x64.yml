@@ -17,6 +17,16 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.version }}
+
+    - name: Verify checkout
+      run: |
+        echo "=== Verifying checkout ==="
+        pwd
+        ls -la
+        echo "=== Check for required files ==="
+        ls -la utils/ downloads.ini pruning.list patches/ || echo "Some files may be missing"
 
     - name: Set up Python
       uses: actions/setup-python@v4
