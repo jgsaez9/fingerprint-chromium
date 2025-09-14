@@ -1,0 +1,244 @@
+name: Build Chromium Full
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Chromium version to build'
+        required: true
+        default: '136.0.7103.113'
+        type: string
+
+jobs:
+  build-macos-x64:
+    runs-on: macos-13
+    timeout-minutes: 360
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.version }}
+
+    - name: Verify checkout
+      run: |
+        echo "=== Verifying checkout ==="
+        pwd
+        ls -la
+        echo "=== Check for required files ==="
+        ls -la utils/ downloads.ini pruning.list patches/ || echo "Some files may be missing"
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install system dependencies
+      run: |
+        echo "=== Installing system dependencies ==="
+        if ! command -v ninja &> /dev/null; then
+          echo "Installing ninja..."
+          brew install ninja
+        else
+          echo "ninja is already installed: $(ninja --version)"
+        fi
+
+        echo "=== Setting up depot_tools ==="
+        if [ ! -d "depot_tools" ]; then
+          git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git || true
+        fi
+        export PATH="$PWD/depot_tools:$PATH"
+        echo "$PWD/depot_tools" >> $GITHUB_PATH
+
+    - name: Download Chromium source
+      run: |
+        echo "=== Downloading Chromium source ==="
+        mkdir -p build/download_cache
+        python3 utils/downloads.py retrieve -c build/download_cache -i downloads.ini
+        echo "=== Unpacking Chromium source ==="
+        python3 utils/downloads.py unpack -c build/download_cache -i downloads.ini -- build/src
+
+    - name: Prune binaries
+      run: |
+        echo "=== Pruning binaries ==="
+        python3 utils/prune_binaries.py build/src pruning.list
+
+    - name: Apply patches
+      run: |
+        echo "=== Applying patches ==="
+        python3 utils/patches.py apply build/src patches
+
+    - name: Apply domain substitution
+      run: |
+        echo "=== Applying domain substitution ==="
+        python3 utils/domain_substitution.py apply -r domain_regex.list -f domain_substitution.list -c build/domsubcache.tar.gz build/src
+
+    - name: Remove Rust dependencies
+      run: |
+        echo "=== Removing Rust dependencies ==="
+        cd build/src
+
+        echo "=== Removing third_party/rust directory ==="
+        rm -rf third_party/rust || true
+
+        echo "=== Creating Rust stub files ==="
+        mkdir -p build/rust
+
+        cat > build/rust/rust_static_library.gni << 'EOF'
+# Disabled Rust static library template
+template("rust_static_library") {
+  not_needed(invoker, "*")
+  group(target_name) {
+    # Do nothing - Rust disabled
+  }
+}
+EOF
+
+        cat > build/rust/cargo_crate.gni << 'EOF'
+# Disabled cargo crate template
+template("cargo_crate") {
+  not_needed(invoker, "*")
+  group(target_name) {
+    # Do nothing - Rust disabled
+  }
+}
+EOF
+
+        cat > build/rust/rust_target.gni << 'EOF'
+# Disabled rust target template
+template("rust_target") {
+  not_needed(invoker, "*")
+  group(target_name) {
+    # Do nothing - Rust disabled
+  }
+}
+EOF
+
+        echo "=== Rust removal completed ==="
+
+    - name: Setup build configuration
+      run: |
+        echo "=== Setting up build configuration ==="
+        mkdir -p build/src/out/Default
+        cat > build/src/out/Default/args.gn << 'EOF'
+        # Base configuration
+        build_with_tflite_lib=false
+        chrome_pgo_phase=0
+        clang_use_chrome_plugins=false
+        disable_fieldtrial_testing_config=true
+        enable_hangout_services_extension=false
+        enable_mdns=false
+        enable_nacl=false
+        enable_reading_list=false
+        enable_remoting=false
+        enable_reporting=false
+        enable_service_discovery=false
+        enable_widevine=true
+        exclude_unwind_tables=true
+        google_api_key=""
+        google_default_client_id=""
+        google_default_client_secret=""
+        safe_browsing_mode=0
+        treat_warnings_as_errors=false
+        use_official_google_api_keys=false
+        use_unofficial_version_number=false
+
+        # Target x64 specifically
+        target_cpu="x64"
+        is_debug=false
+        is_component_build=false
+        symbol_level=1
+        blink_symbol_level=0
+
+        # Disable Rust completely
+        enable_rust=false
+        use_cxx=false
+        build_rust_base_tests=false
+        enable_cxx=false
+        rust_sysroot_absolute=""
+        enable_rust_crash=false
+        enable_rust_boringssl=false
+        enable_rust_crash_safe_browsing=false
+
+        # Build configuration
+        is_official_build=false
+        use_clang_coverage=false
+        use_libfuzzer=false
+        use_sanitizer_coverage=false
+
+        # Use system clang
+        is_clang=true
+        use_custom_libcxx=false
+        clang_base_path="/usr"
+        EOF
+
+    - name: Bootstrap GN
+      run: |
+        echo "=== Bootstrapping GN ==="
+        cd build/src
+        python3 tools/gn/bootstrap/bootstrap.py --skip-generate-buildfiles -j4 -o out/Default/
+
+    - name: Generate build files
+      run: |
+        echo "=== Generating build files ==="
+        cd build/src
+        if ! ./out/Default/gn gen out/Default; then
+          echo "=== Build generation failed, patching remaining Rust references ==="
+          find third_party -name "BUILD.gn" -exec grep -l "rust\|cargo_crate" {} \; 2>/dev/null | while read file; do
+            echo "Patching $file"
+            sed -i '' 's/^.*cargo_crate.*$/# DISABLED: &/' "$file" 2>/dev/null || true
+            sed -i '' 's/^.*rust.*$/# DISABLED: &/' "$file" 2>/dev/null || true
+          done
+          ./out/Default/gn gen out/Default
+        fi
+
+    - name: Build Chromium
+      run: |
+        echo "=== Building Chromium ==="
+        cd build/src
+        ninja -C out/Default chrome chromedriver -j2
+
+    - name: Package application
+      run: |
+        echo "=== Packaging application ==="
+        cd build/src/out/Default
+
+        mkdir -p Chromium.app/Contents/{MacOS,Resources}
+        cp chrome Chromium.app/Contents/MacOS/Chromium
+        chmod +x Chromium.app/Contents/MacOS/Chromium
+
+        cp -r *.pak *.bin Chromium.app/Contents/Resources/ 2>/dev/null || true
+        cp -r locales Chromium.app/Contents/Resources/ 2>/dev/null || true
+
+        cat > Chromium.app/Contents/Info.plist << 'EOF'
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+          <key>CFBundleExecutable</key>
+          <string>Chromium</string>
+          <key>CFBundleIdentifier</key>
+          <string>org.chromium.Chromium</string>
+          <key>CFBundleName</key>
+          <string>Chromium</string>
+          <key>CFBundleVersion</key>
+          <string>136.0.7103.113</string>
+          <key>CFBundleShortVersionString</key>
+          <string>136.0.7103.113</string>
+          <key>LSMinimumSystemVersion</key>
+          <string>10.15</string>
+        </dict>
+        </plist>
+        EOF
+
+        echo "=== Creating DMG ==="
+        hdiutil create -volname "Chromium" -srcfolder Chromium.app -ov -format UDZO chromium-macos-x64.dmg
+
+        ls -la chromium-macos-x64.dmg
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: chromium-macos-x64-${{ github.run_number }}
+        path: build/src/out/Default/chromium-macos-x64.dmg
+        retention-days: 30
