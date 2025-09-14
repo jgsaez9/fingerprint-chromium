@@ -75,6 +75,64 @@ jobs:
         echo "=== Applying domain substitution ==="
         python3 utils/domain_substitution.py apply -r domain_regex.list -f domain_substitution.list -c build/domsubcache.tar.gz build/src
 
+    - name: Completely remove Rust dependencies
+      run: |
+        echo "=== Completely removing Rust dependencies ==="
+        cd build/src
+
+        # Find and list all Rust-related files for debugging
+        echo "=== Found Rust-related .gni files ==="
+        find . -name "*.gni" -exec grep -l "rust_sysroot\|cargo_crate" {} \; | head -20
+
+        # Remove third_party rust directories entirely
+        echo "=== Removing third_party/rust directory ==="
+        rm -rf third_party/rust || true
+
+        # Instead of removing build/rust entirely, create stub files
+        echo "=== Creating Rust stub files ==="
+        mkdir -p build/rust
+
+        # Create empty stub files for the imports
+        cat > build/rust/rust_static_library.gni << 'EOF'
+# Disabled Rust static library template
+template("rust_static_library") {
+  not_needed(invoker, "*")
+  group(target_name) {
+    # Do nothing - Rust disabled
+  }
+}
+EOF
+
+        cat > build/rust/cargo_crate.gni << 'EOF'
+# Disabled cargo crate template
+template("cargo_crate") {
+  not_needed(invoker, "*")
+  group(target_name) {
+    # Do nothing - Rust disabled
+  }
+}
+EOF
+
+        cat > build/rust/rust_target.gni << 'EOF'
+# Disabled rust target template
+template("rust_target") {
+  not_needed(invoker, "*")
+  group(target_name) {
+    # Do nothing - Rust disabled
+  }
+}
+EOF
+
+        # Disable Rust in build configuration files
+        echo "=== Disabling Rust in build files ==="
+        find . -name "*.gn" -exec sed -i '' 's/enable_rust = true/enable_rust = false/g' {} \; 2>/dev/null || true
+        find . -name "*.gni" -exec sed -i '' 's/enable_rust = true/enable_rust = false/g' {} \; 2>/dev/null || true
+
+        # Remove any remaining references to rust in DEPS files
+        find . -name "DEPS" -exec sed -i '' '/rust/d' {} \; 2>/dev/null || true
+
+        echo "=== Rust removal completed ==="
+
     - name: Setup build configuration
       run: |
         echo "=== Setting up build configuration ==="
@@ -109,34 +167,32 @@ jobs:
         symbol_level=1
         blink_symbol_level=0
 
-        # Disable problematic features for build
+        # Completely disable Rust and related features
         enable_rust=false
         use_cxx=false
+        build_rust_base_tests=false
+        enable_cxx=false
+        rust_sysroot_absolute=""
+        enable_rust_crash=false
+
+        # Disable any Rust-related packages
+        enable_rust_boringssl=false
+        enable_rust_crash_safe_browsing=false
+
+        # Build configuration
         is_official_build=false
         use_clang_coverage=false
         use_libfuzzer=false
         use_sanitizer_coverage=false
 
-        # Use system tools
+        # Use system clang
         is_clang=true
         use_custom_libcxx=false
+        clang_base_path="/usr"
         EOF
 
         echo "=== Build configuration created ==="
         cat build/src/out/Default/args.gn
-
-    - name: Setup Clang toolchain
-      run: |
-        echo "=== Setting up Clang toolchain ==="
-        cd build/src
-        # Try to download clang, if it fails, we'll use system clang
-        if ! python3 tools/clang/scripts/update.py; then
-          echo "Failed to download Chromium clang, using system clang"
-          # Modify build config to use system clang
-          echo 'clang_base_path="/usr"' >> out/Default/args.gn
-        else
-          echo "Successfully downloaded Chromium clang"
-        fi
 
     - name: Bootstrap GN
       run: |
@@ -144,11 +200,24 @@ jobs:
         cd build/src
         python3 tools/gn/bootstrap/bootstrap.py --skip-generate-buildfiles -j4 -o out/Default/
 
-    - name: Generate build files
+    - name: Generate build files (with error handling)
       run: |
         echo "=== Generating build files ==="
         cd build/src
-        ./out/Default/gn gen out/Default
+        # Try to generate build files, if it fails due to missing rust, try to patch the issue
+        if ! ./out/Default/gn gen out/Default; then
+          echo "=== Build generation failed, attempting to fix remaining Rust references ==="
+
+          # Find any remaining BUILD.gn files that reference rust and comment them out
+          find third_party -name "BUILD.gn" -exec grep -l "rust\|cargo_crate" {} \; 2>/dev/null | while read file; do
+            echo "Patching $file"
+            sed -i '' 's/^.*cargo_crate.*$/# DISABLED: &/' "$file" 2>/dev/null || true
+            sed -i '' 's/^.*rust.*$/# DISABLED: &/' "$file" 2>/dev/null || true
+          done
+
+          # Try again
+          ./out/Default/gn gen out/Default
+        fi
 
     - name: Build Chromium
       run: |
