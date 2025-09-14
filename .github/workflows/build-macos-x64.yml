@@ -1,4 +1,4 @@
-name: Build Chromium macOS x64
+name: "Build Chromium macOS x64"
 
 on:
   workflow_dispatch:
