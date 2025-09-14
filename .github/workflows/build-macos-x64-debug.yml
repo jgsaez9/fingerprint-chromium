@@ -120,37 +120,29 @@ jobs:
       run: |
         echo "=== Setting up build configuration ==="
         mkdir -p build/src/out/Default
-        # Copy existing flags.gn as base and modify
-        cp build/src/build/config/gclient_args.gni build/src/out/Default/args.gn || true
 
-        # Create minimal working args.gn
-        cat > build/src/out/Default/args.gn << 'EOF'
-        # Minimal working configuration for macOS x64
-        target_cpu = "x64"
-        is_debug = false
-        is_component_build = false
-        symbol_level = 1
+        # Use the existing flags.gn from ungoogled-chromium as base
+        echo "=== Using existing flags.gn as base ==="
+        if [ -f "flags.gn" ]; then
+          cp flags.gn build/src/out/Default/args.gn
+        else
+          echo "flags.gn not found, creating basic configuration"
+          cat > build/src/out/Default/args.gn << 'EOF'
+# Basic working args.gn for Chromium build
+target_cpu = "x64"
+is_debug = false
+is_component_build = false
+symbol_level = 1
+enable_rust = false
+treat_warnings_as_errors = false
+EOF
+        fi
 
-        # Disable Rust completely
-        enable_rust = false
-
-        # Disable problematic features
-        use_custom_libcxx = false
-        treat_warnings_as_errors = false
-        is_official_build = false
-
-        # Basic ungoogled-chromium settings
-        google_api_key = ""
-        google_default_client_id = ""
-        google_default_client_secret = ""
-        safe_browsing_mode = 0
-        enable_widevine = true
-
-        # Disable services that cause issues
-        enable_nacl = false
-        enable_remoting = false
-        enable_reporting = false
-        EOF
+        # Add our specific overrides
+        echo "" >> build/src/out/Default/args.gn
+        echo "# Additional overrides for x64 build" >> build/src/out/Default/args.gn
+        echo "enable_dsyms = false" >> build/src/out/Default/args.gn
+        echo "enable_rust = false" >> build/src/out/Default/args.gn
 
     - name: Bootstrap GN
       run: |
