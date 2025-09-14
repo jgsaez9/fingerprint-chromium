@@ -120,75 +120,36 @@ jobs:
       run: |
         echo "=== Setting up build configuration ==="
         mkdir -p build/src/out/Default
+        # Copy existing flags.gn as base and modify
+        cp build/src/build/config/gclient_args.gni build/src/out/Default/args.gn || true
+
+        # Create minimal working args.gn
         cat > build/src/out/Default/args.gn << 'EOF'
-        # Essential build configuration
-        target_cpu="x64"
-        target_os="mac"
-        is_debug=false
-        is_component_build=false
-        symbol_level=1
-        blink_symbol_level=0
+        # Minimal working configuration for macOS x64
+        target_cpu = "x64"
+        is_debug = false
+        is_component_build = false
+        symbol_level = 1
 
-        # Required macOS settings
-        enable_dsyms=false
-        mac_deployment_target="10.15"
-
-        # Compiler configuration
-        is_clang=true
-        use_custom_libcxx=false
-        treat_warnings_as_errors=false
+        # Disable Rust completely
+        enable_rust = false
 
         # Disable problematic features
-        enable_rust=false
-        use_cxx=false
-        build_rust_base_tests=false
-        enable_cxx=false
-        rust_sysroot_absolute=""
-        enable_rust_crash=false
-        enable_rust_boringssl=false
-        enable_rust_crash_safe_browsing=false
+        use_custom_libcxx = false
+        treat_warnings_as_errors = false
+        is_official_build = false
 
-        # ungoogled-chromium configuration
-        build_with_tflite_lib=false
-        chrome_pgo_phase=0
-        clang_use_chrome_plugins=false
-        disable_fieldtrial_testing_config=true
-        enable_hangout_services_extension=false
-        enable_mdns=false
-        enable_nacl=false
-        enable_reading_list=false
-        enable_remoting=false
-        enable_reporting=false
-        enable_service_discovery=false
-        enable_widevine=true
-        exclude_unwind_tables=true
-        google_api_key=""
-        google_default_client_id=""
-        google_default_client_secret=""
-        safe_browsing_mode=0
-        use_official_google_api_keys=false
-        use_unofficial_version_number=false
+        # Basic ungoogled-chromium settings
+        google_api_key = ""
+        google_default_client_id = ""
+        google_default_client_secret = ""
+        safe_browsing_mode = 0
+        enable_widevine = true
 
-        # Build optimization
-        is_official_build=false
-        use_clang_coverage=false
-        use_libfuzzer=false
-        use_sanitizer_coverage=false
-
-        # Additional required settings
-        enable_nacl_nonsfi=false
-        enable_one_click_signin=false
-        enable_pdf=true
-        enable_plugins=true
-        enable_print_preview=true
-        enable_remoting=false
-        enable_widevine=true
-        fieldtrial_testing_like_official_build=false
-        ffmpeg_branding="Chrome"
-        proprietary_codecs=true
-        rtc_use_h264=true
-        use_gnome_keyring=false
-        use_pulseaudio=false
+        # Disable services that cause issues
+        enable_nacl = false
+        enable_remoting = false
+        enable_reporting = false
         EOF
 
     - name: Bootstrap GN
@@ -201,14 +162,16 @@ jobs:
       run: |
         echo "=== Generating build files ==="
         cd build/src
+
+        # Show current args.gn content for debugging
+        echo "=== Current args.gn content ==="
+        cat out/Default/args.gn
+
+        # First attempt
+        echo "=== First generation attempt ==="
         if ! ./out/Default/gn gen out/Default; then
-          echo "=== Build generation failed, patching remaining Rust references ==="
-          find third_party -name "BUILD.gn" -exec grep -l "rust\|cargo_crate" {} \; 2>/dev/null | while read file; do
-            echo "Patching $file"
-            sed -i '' 's/^.*cargo_crate.*$/# DISABLED: &/' "$file" 2>/dev/null || true
-            sed -i '' 's/^.*rust.*$/# DISABLED: &/' "$file" 2>/dev/null || true
-          done
-          ./out/Default/gn gen out/Default
+          echo "=== First attempt failed, trying with --fail-on-unused-args=false ==="
+          ./out/Default/gn gen out/Default --fail-on-unused-args=false
         fi
 
     - name: Build Chromium
