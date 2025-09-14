@@ -88,9 +88,40 @@ jobs:
         echo "=== Removing third_party/rust directory ==="
         rm -rf third_party/rust || true
 
-        # Remove build/rust directory entirely
-        echo "=== Removing build/rust directory ==="
-        rm -rf build/rust || true
+        # Instead of removing build/rust entirely, create stub files
+        echo "=== Creating Rust stub files ==="
+        mkdir -p build/rust
+
+        # Create empty stub files for the imports
+        cat > build/rust/rust_static_library.gni << 'EOF'
+# Disabled Rust static library template
+template("rust_static_library") {
+  not_needed(invoker, "*")
+  group(target_name) {
+    # Do nothing - Rust disabled
+  }
+}
+EOF
+
+        cat > build/rust/cargo_crate.gni << 'EOF'
+# Disabled cargo crate template
+template("cargo_crate") {
+  not_needed(invoker, "*")
+  group(target_name) {
+    # Do nothing - Rust disabled
+  }
+}
+EOF
+
+        cat > build/rust/rust_target.gni << 'EOF'
+# Disabled rust target template
+template("rust_target") {
+  not_needed(invoker, "*")
+  group(target_name) {
+    # Do nothing - Rust disabled
+  }
+}
+EOF
 
         # Disable Rust in build configuration files
         echo "=== Disabling Rust in build files ==="
