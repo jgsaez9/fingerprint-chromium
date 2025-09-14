@@ -121,7 +121,34 @@ jobs:
         echo "=== Setting up build configuration ==="
         mkdir -p build/src/out/Default
         cat > build/src/out/Default/args.gn << 'EOF'
-        # Base configuration
+        # Essential build configuration
+        target_cpu="x64"
+        target_os="mac"
+        is_debug=false
+        is_component_build=false
+        symbol_level=1
+        blink_symbol_level=0
+
+        # Required macOS settings
+        enable_dsyms=false
+        mac_deployment_target="10.15"
+
+        # Compiler configuration
+        is_clang=true
+        use_custom_libcxx=false
+        treat_warnings_as_errors=false
+
+        # Disable problematic features
+        enable_rust=false
+        use_cxx=false
+        build_rust_base_tests=false
+        enable_cxx=false
+        rust_sysroot_absolute=""
+        enable_rust_crash=false
+        enable_rust_boringssl=false
+        enable_rust_crash_safe_browsing=false
+
+        # ungoogled-chromium configuration
         build_with_tflite_lib=false
         chrome_pgo_phase=0
         clang_use_chrome_plugins=false
@@ -139,37 +166,29 @@ jobs:
         google_default_client_id=""
         google_default_client_secret=""
         safe_browsing_mode=0
-        treat_warnings_as_errors=false
         use_official_google_api_keys=false
         use_unofficial_version_number=false
 
-        # Target x64 specifically
-        target_cpu="x64"
-        is_debug=false
-        is_component_build=false
-        symbol_level=1
-        blink_symbol_level=0
-
-        # Disable Rust completely
-        enable_rust=false
-        use_cxx=false
-        build_rust_base_tests=false
-        enable_cxx=false
-        rust_sysroot_absolute=""
-        enable_rust_crash=false
-        enable_rust_boringssl=false
-        enable_rust_crash_safe_browsing=false
-
-        # Build configuration
+        # Build optimization
         is_official_build=false
         use_clang_coverage=false
         use_libfuzzer=false
         use_sanitizer_coverage=false
 
-        # Use system clang
-        is_clang=true
-        use_custom_libcxx=false
-        clang_base_path="/usr"
+        # Additional required settings
+        enable_nacl_nonsfi=false
+        enable_one_click_signin=false
+        enable_pdf=true
+        enable_plugins=true
+        enable_print_preview=true
+        enable_remoting=false
+        enable_widevine=true
+        fieldtrial_testing_like_official_build=false
+        ffmpeg_branding="Chrome"
+        proprietary_codecs=true
+        rtc_use_h264=true
+        use_gnome_keyring=false
+        use_pulseaudio=false
         EOF
 
     - name: Bootstrap GN
